@@ -144,16 +144,34 @@ function openProfileModal(){
   renderProfilePreview();
   $('#profileModal').classList.add('show');
 }
+async function loadProfileImageSource(file){
+  if('createImageBitmap' in window){
+    try{
+      const bitmap=await createImageBitmap(file);
+      return{source:bitmap,width:bitmap.width,height:bitmap.height,cleanup:()=>{try{bitmap.close()}catch{}}};
+    }catch(e){}
+  }
+  return await new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>resolve({source:img,width:img.naturalWidth,height:img.naturalHeight,cleanup:()=>URL.revokeObjectURL(url)});
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Your browser could not open that photo. Try a JPG, PNG, or another photo.'))};
+    img.src=url;
+  });
+}
 async function resizeProfileImage(file){
-  if(!file||!file.type.startsWith('image/'))throw new Error('Choose an image file.');
-  const bitmap=await createImageBitmap(file);
-  const size=512,canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
-  const ctx=canvas.getContext('2d');
-  const scale=Math.max(size/bitmap.width,size/bitmap.height);
-  const w=bitmap.width*scale,h=bitmap.height*scale;
-  ctx.drawImage(bitmap,(size-w)/2,(size-h)/2,w,h);
-  if(bitmap.close)bitmap.close();
-  return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Could not prepare photo.')),'image/jpeg',0.86));
+  if(!file||!String(file.type||'').startsWith('image/'))throw new Error('Choose an image file.');
+  const loaded=await loadProfileImageSource(file);
+  try{
+    if(!loaded.width||!loaded.height)throw new Error('That photo could not be read.');
+    const size=512,canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
+    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Your browser could not prepare that photo.');
+    const scale=Math.max(size/loaded.width,size/loaded.height);
+    const w=loaded.width*scale,h=loaded.height*scale;
+    ctx.drawImage(loaded.source,(size-w)/2,(size-h)/2,w,h);
+    return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Could not prepare photo.')),'image/jpeg',0.86));
+  }finally{
+    loaded.cleanup();
+  }
 }
 async function previewSelectedProfilePhoto(){
   const file=$('#profilePhoto').files?.[0];if(!file)return;
@@ -174,11 +192,12 @@ async function saveProfileChanges(){
     if(file){
       statusEl.textContent='Uploading photo…';
       const blob=await resizeProfileImage(file);
-      const path=cloudUser.id+'/avatar-'+Date.now()+'.jpg';
-      const {error:uploadError}=await sb.storage.from('avatars').upload(path,blob,{contentType:'image/jpeg',upsert:false});
-      if(uploadError)throw uploadError;
+      const path=cloudUser.id+'/avatar.jpg';
+      const {error:uploadError}=await sb.storage.from('avatars').upload(path,blob,{contentType:'image/jpeg',upsert:true,cacheControl:'60'});
+      if(uploadError)throw new Error(uploadError.message||'Could not upload photo.');
       const {data:publicData}=sb.storage.from('avatars').getPublicUrl(path);
-      avatarUrl=publicData?.publicUrl||'';
+      const baseUrl=publicData?.publicUrl||'';
+      avatarUrl=baseUrl?(baseUrl+(baseUrl.includes('?')?'&':'?')+'v='+Date.now()):'';
     }
     const payload={id:cloudUser.id,email:cloudUser.email||null,display_name:displayName||null,avatar_url:avatarUrl||null,updated_at:new Date().toISOString()};
     const {data,error}=await sb.from('profiles').upsert(payload).select('id,email,display_name,avatar_url').single();
