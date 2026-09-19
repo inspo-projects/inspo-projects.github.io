@@ -7,6 +7,13 @@ var sharedOpen=false;
 
 function q(id){return document.getElementById(id)}
 function currentUser(){return window.inspoCloudApi&&window.inspoCloudApi.getUser?window.inspoCloudApi.getUser():null}
+function usableSharedTitle(value,url){
+  var s=String(value||'').trim();
+  if(!s)return '';
+  if(typeof genericListingTitle==='function'&&genericListingTitle(s))return '';
+  if(typeof isDepopUrl==='function'&&isDepopUrl(url)&&/^(?=.{8,24}$)(?=.*[a-z])(?=.*[A-Z0-9])[A-Za-z0-9_-]+$/.test(s))return '';
+  return s;
+}
 function extractUrl(text){
   var m=String(text||'').match(/https?:\/\/[^\s<>]+/i);
   return m?safeHttpUrl(m[0].replace(/[),.;!?]+$/,'')):'';
@@ -61,9 +68,10 @@ function closeShared(discard){
   if(discard)localStorage.removeItem(PENDING_KEY);
 }
 async function previewShared(data){
+  var incomingTitle=usableSharedTitle(data.title,data.url);
   var base={
     url:data.url,
-    title:data.title||sourceName(data.url)+' find',
+    title:incomingTitle||sourceName(data.url)+' listing',
     image:'',
     source:sourceName(data.url),
     price:'',
@@ -73,9 +81,12 @@ async function previewShared(data){
   };
   try{
     var d=await previewDetails(data.url);
-    base.title=d.title||base.title;
+    var resolved=safeHttpUrl(d.resolvedUrl)||'';
+    if(resolved)base.url=resolved;
+    var detailTitle=usableSharedTitle(d.title,base.url);
+    if(detailTitle)base.title=detailTitle;
     base.image=safeImageUrl(d.image)||'';
-    base.source=sourceName(data.url,d.source);
+    base.source=sourceName(base.url,d.source);
     base.price=d.price||'';
     base.size=d.size||'';
     base.reviews=d.reviews||'';
@@ -84,7 +95,8 @@ async function previewShared(data){
   }catch(e){
     try{
       var p=await preview(data.url);
-      base.title=p.title||base.title;
+      var fallbackTitle=usableSharedTitle(p.title,data.url);
+      if(fallbackTitle)base.title=fallbackTitle;
       base.image=safeImageUrl(p.image)||'';
       base.source=sourceName(data.url,p.source);
     }catch(ignore){}
