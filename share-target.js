@@ -79,36 +79,42 @@ async function previewShared(data){
     reviews:'',
     condition:''
   };
-  try{
-    var d=await previewDetails(data.url);
-    if(isDepopUrl(data.url)&&!safeImageUrl(d.image)){
-      await new Promise(function(resolve){setTimeout(resolve,700)});
-      try{
-        var retry=await previewDetails(data.url);
-        if(retry&&(retry.image||retry.title||retry.resolvedUrl||retry.price))d=retry;
-      }catch(ignore){}
-    }
-    var resolved=safeHttpUrl(d.resolvedUrl)||'';
-    if(resolved)base.url=resolved;
-    var detailTitle=usableSharedTitle(d.title,base.url);
-    if(detailTitle)base.title=detailTitle;
-    base.image=safeImageUrl(d.image)||'';
-    base.source=sourceName(base.url,d.source);
-    base.price=d.price||'';
-    base.size=d.size||'';
-    base.reviews=d.reviews||'';
-    base.condition=d.condition||'';
-    return base;
-  }catch(e){
+  var depop=typeof isDepopUrl==='function'&&isDepopUrl(data.url);
+  var attempts=depop?3:1;
+
+  for(var i=0;i<attempts;i++){
     try{
-      var p=await preview(data.url);
-      var fallbackTitle=usableSharedTitle(p.title,data.url);
-      if(fallbackTitle)base.title=fallbackTitle;
-      base.image=safeImageUrl(p.image)||'';
-      base.source=sourceName(data.url,p.source);
+      var d=await previewDetails(base.url);
+      var resolved=safeHttpUrl(d.resolvedUrl)||'';
+      if(resolved)base.url=resolved;
+
+      var detailTitle=usableSharedTitle(d.title,base.url);
+      if(detailTitle)base.title=detailTitle;
+
+      base.image=safeImageUrl(d.image)||base.image;
+      base.source=sourceName(base.url,d.source);
+      base.price=d.price||base.price;
+      base.size=d.size||base.size;
+      base.reviews=d.reviews||base.reviews;
+      base.condition=d.condition||base.condition;
+
+      if(base.image||!depop)return base;
     }catch(ignore){}
-    return base;
+
+    if(i<attempts-1){
+      await new Promise(function(resolve){setTimeout(resolve,700*(i+1))});
+    }
   }
+
+  try{
+    var p=await preview(base.url);
+    var fallbackTitle=usableSharedTitle(p.title,base.url);
+    if(fallbackTitle)base.title=fallbackTitle;
+    base.image=safeImageUrl(p.image)||base.image;
+    base.source=sourceName(base.url,p.source);
+  }catch(ignore){}
+
+  return base;
 }
 function boardOptions(){
   return (projects||[]).filter(function(p){return p._role!=='viewer'});
