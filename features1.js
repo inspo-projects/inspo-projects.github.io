@@ -52,7 +52,9 @@ function isEbayUrl(url=''){
 }
 function genericListingTitle(value=''){
   const s=String(value||'').trim();
+  const looksLikeShareCode=/^(?=.{8,24}$)(?=.*[a-z])(?=.*[A-Z0-9])[A-Za-z0-9_-]+$/.test(s);
   return !s
+    ||looksLikeShareCode
     ||/^(Amazon|Vinted|Depop|Inspo) (outfit option|find)$/i.test(s)
     ||/^Look what I just found on Depop/i.test(s)
     ||/^Error Page\s*\|\s*eBay$/i.test(s)
@@ -160,21 +162,12 @@ async function previewDetails(url){
     };
   }
 
+  let depopDirect={},depopResolved='';
   if(depop&&window.inspoCloudApi?.previewDepop){
     try{
-      const direct=await window.inspoCloudApi.previewDepop(url);
-      if(direct&&(direct.title||direct.image||direct.price||direct.size||direct.condition)){
-        return{
-          title:direct.title||'',
-          image:safeImageUrl(direct.image)||'',
-          source:'Depop',
-          price:direct.price||'',
-          size:direct.size||'',
-          reviews:'',
-          condition:direct.condition||'',
-          resolvedUrl:safeHttpUrl(direct.resolvedUrl)||''
-        };
-      }
+      depopDirect=await window.inspoCloudApi.previewDepop(url)||{};
+      depopResolved=safeHttpUrl(depopDirect.resolvedUrl)||'';
+      if(depopResolved)url=depopResolved;
     }catch(e){}
   }
 
@@ -246,6 +239,20 @@ async function previewDetails(url){
   if(amazon){
     const exactPrice=cleanAmazonPrice(d.amazonPrice),exactSize=cleanAmazonSize(d.amazonSize);
     return{title:d.title||'',image:d.image?.url||'',source:d.publisher||'',price:exactPrice||'See Amazon',size:exactSize||'Choose on Amazon',reviews:amazonReview||det.reviews||'',condition:''};
+  }
+
+  if(depop){
+    const microlinkTitle=genericListingTitle(d.title)?'':(d.title||'');
+    return{
+      title:depopDirect.title||microlinkTitle,
+      image:safeImageUrl(depopDirect.image)||safeImageUrl(d.image?.url)||'',
+      source:'Depop',
+      price:depopDirect.price||det.price||'',
+      size:depopDirect.size||det.size||'',
+      reviews:'',
+      condition:depopDirect.condition||det.condition||'',
+      resolvedUrl:depopResolved||''
+    };
   }
 
   return{title:d.title||'',image:d.image?.url||'',source:d.publisher||'',price:det.price||'',size:det.size||'',reviews:det.reviews||'',condition:det.condition||''};
