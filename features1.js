@@ -50,6 +50,19 @@ function isEbayUrl(url=''){
     return h==='ebay.com'||h.endsWith('.ebay.com')||h==='ebay.us'||h.endsWith('.ebay.us');
   }catch{return false}
 }
+function depopFallbackUrls(url=''){
+  const out=[];const add=v=>{v=safeHttpUrl(v);if(v&&!out.includes(v))out.push(v)};
+  add(url);
+  try{
+    const u=new URL(url),h=u.hostname.toLowerCase(),path=u.pathname.replace(/^\/+/, '');
+    if(h==='depop.app.link'&&path){
+      add('https://depop_webonly.app.link/'+path);
+      add('https://depop-web.app.link/'+path);
+      const web=new URL(url);web.searchParams.set('$web_only','true');web.searchParams.set('$desktop_web_only','true');web.searchParams.set('$mobile_web_only','true');add(web.toString());
+    }
+  }catch{}
+  return out;
+}
 function genericListingTitle(value=''){
   const s=String(value||'').trim();
   const looksLikeShareCode=/^(?=.{8,24}$)(?=.*[a-z])(?=.*[A-Z0-9])[A-Za-z0-9_-]+$/.test(s);
@@ -162,13 +175,35 @@ async function previewDetails(url){
     };
   }
 
-  let depopDirect={},depopResolved='';
+  let depopDirect={},depopResolved='',depopMicrolink={};
   if(depop&&window.inspoCloudApi?.previewDepop){
     try{
       depopDirect=await window.inspoCloudApi.previewDepop(url)||{};
       depopResolved=safeHttpUrl(depopDirect.resolvedUrl)||'';
       if(depopResolved)url=depopResolved;
     }catch(e){}
+  }
+
+  if(depop&&!depopResolved&&(!depopDirect.title||!depopDirect.image)){
+    const candidates=depopFallbackUrls(url);
+    for(const candidate of candidates){
+      try{
+        const mq=new URLSearchParams();
+        mq.set('url',candidate);mq.set('prerender','true');
+        const mr=await fetch('https://api.microlink.io/?'+mq.toString());
+        if(!mr.ok)continue;
+        const mj=await mr.json(),md=mj.data||{};
+        const mt=String(md.title||'').trim(),mi=safeImageUrl(md.image?.url||''),mu=safeHttpUrl(md.url||md.canonical?.url||'');
+        if(mt&&!genericListingTitle(mt))depopMicrolink.title=mt;
+        if(mi)depopMicrolink.image=mi;
+        if(mu&&isDepopUrl(mu))depopMicrolink.resolvedUrl=mu;
+        if(depopMicrolink.title&&depopMicrolink.image)break;
+      }catch(e){}
+    }
+    if(depopMicrolink.resolvedUrl){
+      depopResolved=depopMicrolink.resolvedUrl;
+      url=depopResolved;
+    }
   }
 
   if(vinted&&window.inspoCloudApi?.previewVinted){
@@ -244,8 +279,8 @@ async function previewDetails(url){
   if(depop){
     const microlinkTitle=genericListingTitle(d.title)?'':(d.title||'');
     return{
-      title:depopDirect.title||microlinkTitle,
-      image:safeImageUrl(depopDirect.image)||safeImageUrl(d.image?.url)||'',
+      title:depopDirect.title||depopMicrolink.title||microlinkTitle,
+      image:safeImageUrl(depopDirect.image)||safeImageUrl(depopMicrolink.image)||safeImageUrl(d.image?.url)||'',
       source:'Depop',
       price:depopDirect.price||det.price||'',
       size:depopDirect.size||det.size||'',
