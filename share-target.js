@@ -81,6 +81,13 @@ async function previewShared(data){
   };
   try{
     var d=await previewDetails(data.url);
+    if(isDepopUrl(data.url)&&!safeImageUrl(d.image)){
+      await new Promise(function(resolve){setTimeout(resolve,700)});
+      try{
+        var retry=await previewDetails(data.url);
+        if(retry&&(retry.image||retry.title||retry.resolvedUrl||retry.price))d=retry;
+      }catch(ignore){}
+    }
     var resolved=safeHttpUrl(d.resolvedUrl)||'';
     if(resolved)base.url=resolved;
     var detailTitle=usableSharedTitle(d.title,base.url);
