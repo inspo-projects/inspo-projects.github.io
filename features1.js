@@ -124,6 +124,15 @@ function cleanAmazonSize(value=''){
   const s=String(value||'').replace(/\s+/g,' ').trim();
   return s&&s.length<45?s:'';
 }
+function amazonProductImage(value=''){
+  const safe=safeImageUrl(value)||'';
+  if(!safe)return '';
+  try{
+    const u=new URL(safe),h=u.hostname.toLowerCase();
+    const amazonHost=h==='m.media-amazon.com'||h.endsWith('.media-amazon.com')||h==='images-na.ssl-images-amazon.com';
+    return amazonHost&&/\/images\/I\//i.test(u.pathname)?safe:'';
+  }catch{return ''}
+}
 
 async function previewDetails(url){
   url=safeHttpUrl(url);if(!url)throw new Error('unsafe url');
@@ -273,7 +282,7 @@ async function previewDetails(url){
 
   if(amazon){
     let title=d.title||'';
-    let image=safeImageUrl(d.image?.url)||'';
+    let image=amazonProductImage(d.image?.url)||'';
     let exactPrice=cleanAmazonPrice(d.amazonPrice);
     let exactSize=cleanAmazonSize(d.amazonSize);
     let reviews=amazonReview||det.reviews||'';
@@ -285,7 +294,7 @@ async function previewDetails(url){
     if((!image||genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&window.inspoCloudApi?.previewAmazon){
       try{
         const direct=await window.inspoCloudApi.previewAmazon(url)||{};
-        const directImage=safeImageUrl(direct.image)||'';
+        const directImage=amazonProductImage(direct.image)||'';
         const directTitle=String(direct.title||'').trim();
         resolvedUrl=safeHttpUrl(direct.resolvedUrl)||'';
 
@@ -307,7 +316,7 @@ async function previewDetails(url){
             const ar=await fetch('https://api.microlink.io/?'+aq.toString());
             if(ar.ok){
               const aj=await ar.json(),ad=aj.data||{};
-              const retryImage=safeImageUrl(ad.image?.url)||'';
+              const retryImage=amazonProductImage(ad.image?.url)||'';
               const retryTitle=String(ad.title||'').trim();
               if(!image&&retryImage)image=retryImage;
               if((genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&retryTitle&&!genericListingTitle(retryTitle))title=retryTitle;
@@ -356,7 +365,7 @@ async function enrichItem(x,force=false){
   try{
     const d=await previewDetails(x.url);let changed=false;
     const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url);
-    if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image))))){x.image=d.image;changed=true}
+    if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
     if(d.title&&genericListingTitle(x.title)){x.title=d.title;changed=true}
     if((depop||ebay||amazon)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
     const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
