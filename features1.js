@@ -128,6 +128,15 @@ function cleanAmazonSize(value=''){
 async function previewDetails(url){
   url=safeHttpUrl(url);if(!url)throw new Error('unsafe url');
   const amazon=isAmazonUrl(url),vinted=isVintedUrl(url),depop=isDepopUrl(url),ebay=isEbayUrl(url),q=new URLSearchParams();
+  let amazonDirect={};
+
+  if(amazon&&window.inspoCloudApi?.previewAmazon){
+    try{
+      amazonDirect=await window.inspoCloudApi.previewAmazon(url)||{};
+      const resolved=safeHttpUrl(amazonDirect.resolvedUrl)||'';
+      if(resolved&&isAmazonUrl(resolved))url=resolved;
+    }catch(e){}
+  }
 
   if(ebay){
     let direct={};
@@ -272,8 +281,12 @@ async function previewDetails(url){
   }
 
   if(amazon){
-    const exactPrice=cleanAmazonPrice(d.amazonPrice),exactSize=cleanAmazonSize(d.amazonSize);
-    return{title:d.title||'',image:d.image?.url||'',source:d.publisher||'',price:exactPrice||'See Amazon',size:exactSize||'Choose on Amazon',reviews:amazonReview||det.reviews||'',condition:''};
+    const exactPrice=cleanAmazonPrice(amazonDirect.price)||cleanAmazonPrice(d.amazonPrice);
+    const exactSize=cleanAmazonSize(amazonDirect.size)||cleanAmazonSize(d.amazonSize);
+    const title=amazonDirect.title||d.title||'';
+    const image=safeImageUrl(amazonDirect.image)||safeImageUrl(d.image?.url)||'';
+    const reviews=amazonDirect.reviews||amazonReview||det.reviews||'';
+    return{title,image,source:'Amazon',price:exactPrice||'See Amazon',size:exactSize||'Choose on Amazon',reviews,condition:'',resolvedUrl:safeHttpUrl(amazonDirect.resolvedUrl)||''};
   }
 
   if(depop){
