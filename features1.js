@@ -279,19 +279,44 @@ async function previewDetails(url){
     let reviews=amazonReview||det.reviews||'';
     let resolvedUrl='';
 
-    // Keep the older Microlink method first because it works for most Amazon links.
-    // Only use our server-side reader as a fallback when Amazon's short link gives us a blank/generic preview.
-    if((!image||genericListingTitle(title)||/^Amazon\.com$/i.test(String(title).trim()))&&window.inspoCloudApi?.previewAmazon){
+    // First keep the older preview result when it works.
+    // If an a.co link comes back blank/generic, resolve it to the real Amazon product URL
+    // and run the same proven preview method again on that full URL.
+    if((!image||genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&window.inspoCloudApi?.previewAmazon){
       try{
         const direct=await window.inspoCloudApi.previewAmazon(url)||{};
         const directImage=safeImageUrl(direct.image)||'';
         const directTitle=String(direct.title||'').trim();
+        resolvedUrl=safeHttpUrl(direct.resolvedUrl)||'';
+
         if(!image&&directImage)image=directImage;
-        if((genericListingTitle(title)||/^Amazon\.com$/i.test(String(title).trim()))&&directTitle&&!genericListingTitle(directTitle))title=directTitle;
+        if((genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&directTitle&&!genericListingTitle(directTitle))title=directTitle;
         if(!exactPrice)exactPrice=cleanAmazonPrice(direct.price);
         if(!exactSize)exactSize=cleanAmazonSize(direct.size);
         if(!reviews&&direct.reviews)reviews=direct.reviews;
-        resolvedUrl=safeHttpUrl(direct.resolvedUrl)||'';
+
+        if(resolvedUrl&&isAmazonUrl(resolvedUrl)&&(!image||genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))){
+          try{
+            const aq=new URLSearchParams();
+            aq.set('url',resolvedUrl);
+            aq.set('prerender','true');
+            aq.set('data.amazonRating.selector','#acrPopover');aq.set('data.amazonRating.attr','title');
+            aq.set('data.amazonReviewCount.selector','#acrCustomerReviewText');aq.set('data.amazonReviewCount.attr','aria-label');
+            aq.set('data.amazonPrice.selector','#corePrice_feature_div .a-price .a-offscreen');aq.set('data.amazonPrice.attr','text');
+            aq.set('data.amazonSize.selector','#variation_size_name .selection');aq.set('data.amazonSize.attr','text');
+            const ar=await fetch('https://api.microlink.io/?'+aq.toString());
+            if(ar.ok){
+              const aj=await ar.json(),ad=aj.data||{};
+              const retryImage=safeImageUrl(ad.image?.url)||'';
+              const retryTitle=String(ad.title||'').trim();
+              if(!image&&retryImage)image=retryImage;
+              if((genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&retryTitle&&!genericListingTitle(retryTitle))title=retryTitle;
+              if(!exactPrice)exactPrice=cleanAmazonPrice(ad.amazonPrice);
+              if(!exactSize)exactSize=cleanAmazonSize(ad.amazonSize);
+              if(!reviews)reviews=amazonReviews(ad.amazonRating,ad.amazonReviewCount);
+            }
+          }catch(e){}
+        }
       }catch(e){}
     }
 
@@ -333,7 +358,7 @@ async function enrichItem(x,force=false){
     const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url);
     if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image))))){x.image=d.image;changed=true}
     if(d.title&&genericListingTitle(x.title)){x.title=d.title;changed=true}
-    if((depop||ebay)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
+    if((depop||ebay||amazon)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
     const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
     const amazon=isAmazonUrl(x.url);
     if(amazon){
