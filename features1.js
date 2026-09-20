@@ -272,8 +272,39 @@ async function previewDetails(url){
   }
 
   if(amazon){
-    const exactPrice=cleanAmazonPrice(d.amazonPrice),exactSize=cleanAmazonSize(d.amazonSize);
-    return{title:d.title||'',image:safeImageUrl(d.image?.url)||'',source:d.publisher||'Amazon',price:exactPrice||'See Amazon',size:exactSize||'Choose on Amazon',reviews:amazonReview||det.reviews||'',condition:''};
+    let title=d.title||'';
+    let image=safeImageUrl(d.image?.url)||'';
+    let exactPrice=cleanAmazonPrice(d.amazonPrice);
+    let exactSize=cleanAmazonSize(d.amazonSize);
+    let reviews=amazonReview||det.reviews||'';
+    let resolvedUrl='';
+
+    // Keep the older Microlink method first because it works for most Amazon links.
+    // Only use our server-side reader as a fallback when Amazon's short link gives us a blank/generic preview.
+    if((!image||genericListingTitle(title)||/^Amazon\.com$/i.test(String(title).trim()))&&window.inspoCloudApi?.previewAmazon){
+      try{
+        const direct=await window.inspoCloudApi.previewAmazon(url)||{};
+        const directImage=safeImageUrl(direct.image)||'';
+        const directTitle=String(direct.title||'').trim();
+        if(!image&&directImage)image=directImage;
+        if((genericListingTitle(title)||/^Amazon\.com$/i.test(String(title).trim()))&&directTitle&&!genericListingTitle(directTitle))title=directTitle;
+        if(!exactPrice)exactPrice=cleanAmazonPrice(direct.price);
+        if(!exactSize)exactSize=cleanAmazonSize(direct.size);
+        if(!reviews&&direct.reviews)reviews=direct.reviews;
+        resolvedUrl=safeHttpUrl(direct.resolvedUrl)||'';
+      }catch(e){}
+    }
+
+    return{
+      title:title||'',
+      image,
+      source:'Amazon',
+      price:exactPrice||'See Amazon',
+      size:exactSize||'Choose on Amazon',
+      reviews,
+      condition:'',
+      resolvedUrl
+    };
   }
 
   if(depop){
