@@ -134,212 +134,88 @@ function amazonProductImage(value=''){
   }catch{return ''}
 }
 
+let amazonPreviewQueue=Promise.resolve();
+const waitMs=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+async function amazonMicrolinkOnce(targetUrl){
+  const q=new URLSearchParams();
+  q.set('url',targetUrl);
+  q.set('prerender','true');
+  q.set('data.amazonRating.selector','#acrPopover');q.set('data.amazonRating.attr','title');
+  q.set('data.amazonReviewCount.selector','#acrCustomerReviewText');q.set('data.amazonReviewCount.attr','aria-label');
+  q.set('data.amazonPrice.selector','#corePrice_feature_div .a-price .a-offscreen');q.set('data.amazonPrice.attr','text');
+  q.set('data.amazonSize.selector','#variation_size_name .selection');q.set('data.amazonSize.attr','text');
+  const r=await fetch('https://api.microlink.io/?'+q.toString());
+  if(!r.ok)throw new Error('Amazon preview unavailable');
+  const j=await r.json(),d=j.data||{};
+  const title=String(d.title||'').trim();
+  const image=amazonProductImage(d.image?.url)||'';
+  const resolvedUrl=safeHttpUrl(d.url||d.canonical?.url||'')||'';
+  return{
+    title,
+    image,
+    price:cleanAmazonPrice(d.amazonPrice),
+    size:cleanAmazonSize(d.amazonSize),
+    reviews:amazonReviews(d.amazonRating,d.amazonReviewCount),
+    resolvedUrl
+  };
+}
+
+async function amazonPreviewRobust(originalUrl){
+  const run=async()=>{
+    let target=originalUrl;
+    let best={title:'',image:'',price:'',size:'',reviews:'',resolvedUrl:''};
+
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        const d=await amazonMicrolinkOnce(target);
+        if(d.title&&!genericListingTitle(d.title)&&!/^Amazon\.com(?::|$)/i.test(d.title))best.title=d.title;
+        if(d.image)best.image=d.image;
+        if(d.price)best.price=d.price;
+        if(d.size)best.size=d.size;
+        if(d.reviews)best.reviews=d.reviews;
+        if(d.resolvedUrl&&isAmazonUrl(d.resolvedUrl)){
+          best.resolvedUrl=d.resolvedUrl;
+          target=d.resolvedUrl;
+        }
+        if(best.image&&best.title)return best;
+      }catch(e){}
+
+      // The server reader is mainly useful for expanding a.co into the real Amazon URL.
+      if(window.inspoCloudApi?.previewAmazon){
+        try{
+          const direct=await window.inspoCloudApi.previewAmazon(target);
+          const directImage=amazonProductImage(direct?.image)||'';
+          const directTitle=String(direct?.title||'').trim();
+          const resolved=safeHttpUrl(direct?.resolvedUrl)||'';
+          if(directImage)best.image=directImage;
+          if(directTitle&&!genericListingTitle(directTitle)&&!/^Amazon\.com(?::|$)/i.test(directTitle))best.title=directTitle;
+          if(direct?.price)best.price=cleanAmazonPrice(direct.price)||best.price;
+          if(direct?.size)best.size=cleanAmazonSize(direct.size)||best.size;
+          if(direct?.reviews)best.reviews=direct.reviews;
+          if(resolved&&isAmazonUrl(resolved)){
+            best.resolvedUrl=resolved;
+            target=resolved;
+          }
+          if(best.image&&best.title)return best;
+        }catch(e){}
+      }
+
+      // Amazon/Microlink gets flaky when several links are added quickly. Back off instead of hammering it.
+      if(attempt<2)await waitMs(1300*(attempt+1));
+    }
+    return best;
+  };
+
+  const queued=amazonPreviewQueue.then(run,run);
+  amazonPreviewQueue=queued.catch(()=>{});
+  return queued;
+}
+
 async function previewDetails(url){
   url=safeHttpUrl(url);if(!url)throw new Error('unsafe url');
   const amazon=isAmazonUrl(url),vinted=isVintedUrl(url),depop=isDepopUrl(url),ebay=isEbayUrl(url),q=new URLSearchParams();
 
-  if(ebay){
-    let direct={};
-    if(window.inspoCloudApi?.previewEbay){
-      try{direct=await window.inspoCloudApi.previewEbay(url)||{}}catch(e){}
-    }
-
-    let title=direct.title||'';
-    let image=safeImageUrl(direct.image)||'';
-    const resolvedUrl=safeHttpUrl(direct.resolvedUrl)||'';
-
-    if(!title||!image){
-      try{
-        const id=String(url).match(/\/itm\/(?:[^/]+\/)?(\d{9,15})/i)?.[1]||'';
-        const previewUrl=id?'https://www.ebay.com/itm/'+id:(resolvedUrl||url);
-        const mq=new URLSearchParams();
-        mq.set('url',previewUrl);
-        mq.set('prerender','true');
-        const mr=await fetch('https://api.microlink.io/?'+mq.toString());
-        if(mr.ok){
-          const mj=await mr.json(),md=mj.data||{};
-          const mt=String(md.title||'').trim();
-          const mi=safeImageUrl(md.image?.url||'');
-          if(!title&&mt&&!genericListingTitle(mt))title=mt;
-          if(!image&&mi){
-            try{
-              const h=new URL(mi).hostname.toLowerCase();
-              if(h==='i.ebayimg.com'||h.endsWith('.ebayimg.com'))image=mi;
-            }catch(e){}
-          }
-        }
-      }catch(e){}
-    }
-
-    return{
-      title,
-      image,
-      source:'eBay',
-      price:direct?.priceExact===true?(direct.price||''):'',
-      size:direct?.size||'',
-      reviews:'',
-      condition:direct?.condition||'',
-      resolvedUrl,
-      priceExact:direct?.priceExact===true
-    };
-  }
-
-  let depopDirect={},depopResolved='',depopMicrolink={};
-  if(depop&&window.inspoCloudApi?.previewDepop){
-    try{
-      depopDirect=await window.inspoCloudApi.previewDepop(url)||{};
-      depopResolved=safeHttpUrl(depopDirect.resolvedUrl)||'';
-      if(depopResolved)url=depopResolved;
-    }catch(e){}
-  }
-
-  if(depop&&!depopResolved&&(!depopDirect.title||!depopDirect.image)){
-    const candidates=depopFallbackUrls(url);
-    for(const candidate of candidates){
-      try{
-        const mq=new URLSearchParams();
-        mq.set('url',candidate);mq.set('prerender','true');
-        const mr=await fetch('https://api.microlink.io/?'+mq.toString());
-        if(!mr.ok)continue;
-        const mj=await mr.json(),md=mj.data||{};
-        const mt=String(md.title||'').trim(),mi=safeImageUrl(md.image?.url||''),mu=safeHttpUrl(md.url||md.canonical?.url||'');
-        if(mt&&!genericListingTitle(mt))depopMicrolink.title=mt;
-        if(mi)depopMicrolink.image=mi;
-        if(mu&&isDepopUrl(mu))depopMicrolink.resolvedUrl=mu;
-        if(depopMicrolink.title&&depopMicrolink.image)break;
-      }catch(e){}
-    }
-    if(depopMicrolink.resolvedUrl){
-      depopResolved=depopMicrolink.resolvedUrl;
-      url=depopResolved;
-    }
-  }
-
-  if(vinted&&window.inspoCloudApi?.previewVinted){
-    try{
-      const direct=await window.inspoCloudApi.previewVinted(url);
-      if(direct&&(direct.title||direct.image||direct.price||direct.size||direct.condition)){
-        return{
-          title:direct.title||'',
-          image:safeImageUrl(direct.image)||'',
-          source:'Vinted',
-          price:direct.price||'',
-          size:direct.size||'',
-          reviews:'',
-          condition:direct.condition||''
-        };
-      }
-    }catch(e){}
-  }
-
-  q.set('url',url);
-  q.set('prerender','true');
-  q.set('data.pageText.selector','body');
-  q.set('data.pageText.attr','text');
-
-  if(vinted){
-    q.set('data.vintedPrice.selector','[data-testid="item-sidebar-price-container"]');
-    q.set('data.vintedPrice.attr','text');
-    q.set('data.vintedTotal.selector','[data-testid="total-combined-price"]');
-    q.set('data.vintedTotal.attr','text');
-    q.set('data.vintedImage.selector','meta[property="og:image"]');
-    q.set('data.vintedImage.attr','content');
-    q.set('data.vintedTitle.selector','meta[property="og:title"]');
-    q.set('data.vintedTitle.attr','content');
-    q.set('data.vintedDescription.selector','meta[name="description"]');
-    q.set('data.vintedDescription.attr','content');
-    q.set('data.vintedJson.selector','script[type="application/ld+json"]');
-    q.set('data.vintedJson.attr','text');
-  }
-
-  if(amazon){
-    q.set('data.amazonRating.selector','#acrPopover');q.set('data.amazonRating.attr','title');
-    q.set('data.amazonReviewCount.selector','#acrCustomerReviewText');q.set('data.amazonReviewCount.attr','aria-label');
-    q.set('data.amazonPrice.selector','#corePrice_feature_div .a-price .a-offscreen');q.set('data.amazonPrice.attr','text');
-    q.set('data.amazonSize.selector','#variation_size_name .selection');q.set('data.amazonSize.attr','text');
-  }
-
-  const r=await fetch('https://api.microlink.io/?'+q.toString());
-  if(!r.ok)throw new Error('details');
-  const j=await r.json(),d=j.data||{};
-  const text=typeof d.pageText==='string'?d.pageText:(d.pageText?.value||'');
-  const det=parseDetails([d.title,d.description,text].filter(Boolean).join(' '));
-  const amazonReview=amazonReviews(d.amazonRating,d.amazonReviewCount);
-
-  if(vinted){
-    const structured=parseVintedStructured(d.vintedJson);
-    const exactPrice=cleanListingPrice(d.vintedPrice)
-      ||cleanListingPrice(d.vintedTotal)
-      ||structured.price
-      ||cleanListingPrice(d.vintedDescription)
-      ||cleanListingPrice(text)
-      ||det.price
-      ||'';
-    const image=safeImageUrl(d.vintedImage)||structured.image||safeImageUrl(d.image?.url)||'';
-    const title=d.vintedTitle||structured.title||d.title||'';
-    return{title,image,source:d.publisher||'Vinted',price:exactPrice,size:det.size||'',reviews:det.reviews||'',condition:det.condition||''};
-  }
-
-  if(amazon){
-    let title=d.title||'';
-    let image=amazonProductImage(d.image?.url)||'';
-    let exactPrice=cleanAmazonPrice(d.amazonPrice);
-    let exactSize=cleanAmazonSize(d.amazonSize);
-    let reviews=amazonReview||det.reviews||'';
-    let resolvedUrl='';
-
-    // First keep the older preview result when it works.
-    // If an a.co link comes back blank/generic, resolve it to the real Amazon product URL
-    // and run the same proven preview method again on that full URL.
-    if((!image||genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&window.inspoCloudApi?.previewAmazon){
-      try{
-        const direct=await window.inspoCloudApi.previewAmazon(url)||{};
-        const directImage=amazonProductImage(direct.image)||'';
-        const directTitle=String(direct.title||'').trim();
-        resolvedUrl=safeHttpUrl(direct.resolvedUrl)||'';
-
-        if(!image&&directImage)image=directImage;
-        if((genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&directTitle&&!genericListingTitle(directTitle))title=directTitle;
-        if(!exactPrice)exactPrice=cleanAmazonPrice(direct.price);
-        if(!exactSize)exactSize=cleanAmazonSize(direct.size);
-        if(!reviews&&direct.reviews)reviews=direct.reviews;
-
-        if(resolvedUrl&&isAmazonUrl(resolvedUrl)&&(!image||genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))){
-          try{
-            const aq=new URLSearchParams();
-            aq.set('url',resolvedUrl);
-            aq.set('prerender','true');
-            aq.set('data.amazonRating.selector','#acrPopover');aq.set('data.amazonRating.attr','title');
-            aq.set('data.amazonReviewCount.selector','#acrCustomerReviewText');aq.set('data.amazonReviewCount.attr','aria-label');
-            aq.set('data.amazonPrice.selector','#corePrice_feature_div .a-price .a-offscreen');aq.set('data.amazonPrice.attr','text');
-            aq.set('data.amazonSize.selector','#variation_size_name .selection');aq.set('data.amazonSize.attr','text');
-            const ar=await fetch('https://api.microlink.io/?'+aq.toString());
-            if(ar.ok){
-              const aj=await ar.json(),ad=aj.data||{};
-              const retryImage=amazonProductImage(ad.image?.url)||'';
-              const retryTitle=String(ad.title||'').trim();
-              if(!image&&retryImage)image=retryImage;
-              if((genericListingTitle(title)||/^Amazon\.com(?::|$)/i.test(String(title).trim()))&&retryTitle&&!genericListingTitle(retryTitle))title=retryTitle;
-              if(!exactPrice)exactPrice=cleanAmazonPrice(ad.amazonPrice);
-              if(!exactSize)exactSize=cleanAmazonSize(ad.amazonSize);
-              if(!reviews)reviews=amazonReviews(ad.amazonRating,ad.amazonReviewCount);
-            }
-          }catch(e){}
-        }
-      }catch(e){}
-    }
-
-    return{
-      title:title||'',
-      image,
-      source:'Amazon',
-      price:exactPrice||'See Amazon',
-      size:exactSize||'Choose on Amazon',
-      reviews,
-      condition:'',
-      resolvedUrl
-    };
-  }
 
   if(depop){
     const microlinkTitle=genericListingTitle(d.title)?'':(d.title||'');
