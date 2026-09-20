@@ -17,7 +17,7 @@ async function hydrateBoardDetails(boardId){
           const d=await previewDetails(x.url);
           const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url);
           if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
-          if(d.title&&genericListingTitle(x.title)){x.title=d.title;changed=true}
+          if(d.title&&(genericListingTitle(x.title)||(amazon&&/^Amazon\.com(?::|$)/i.test(String(x.title||'').trim())))){x.title=d.title;changed=true}
           if((depop||ebay||amazon)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
           if(ebay&&genericListingTitle(x.title)&&!d.title){x.title='eBay listing';changed=true}
           const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
@@ -52,7 +52,7 @@ async function hydrateMissing(){
           const d=await preview(x.url);
           const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url);
           if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
-          if(d.title&&genericListingTitle(x.title)){x.title=d.title;changed=true}
+          if(d.title&&(genericListingTitle(x.title)||(amazon&&/^Amazon\.com(?::|$)/i.test(String(x.title||'').trim())))){x.title=d.title;changed=true}
           if((depop||ebay||amazon)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
           if(ebay&&genericListingTitle(x.title)&&!d.title){x.title='eBay listing';changed=true}
           const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
