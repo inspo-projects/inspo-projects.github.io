@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Inspo Projects Saver",
+  "version": "1.0.0",
+  "description": "Send the current page or a product link straight to Inspo Projects.",
+  "permissions": ["activeTab", "contextMenus"],
+  "action": {
+    "default_title": "Save to Inspo Projects"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
