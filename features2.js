@@ -43,4 +43,18 @@ $('#saveBoard').onclick=async()=>{
     btn.disabled=false;btn.textContent=editBoardId?'Save changes':'Create board';
   }
 };
-$('#deleteBoard').onclick=()=>{const p=projects.find(x=>x.id===editBoardId);if(!p)return;if(!confirm(`Delete “${p.title}”?`))return;projects=projects.filter(x=>x.id!==p.id);persist();closeModal('boardModal');if(currentId===p.id)currentId=null;renderHome();toast('Board deleted')};
+$('#deleteBoard').onclick=async()=>{
+  const p=projects.find(x=>x.id===editBoardId);if(!p)return;
+  if(!confirm(`Delete “${p.title}”? This will remove the board and its finds.`))return;
+  const btn=$('#deleteBoard');btn.disabled=true;btn.textContent='Deleting…';
+  try{
+    if(window.inspoCloudApi?.deleteBoard&&p._cloud)await window.inspoCloudApi.deleteBoard(p.id);
+    projects=projects.filter(x=>x.id!==p.id);
+    saveLocal();
+    closeModal('boardModal');
+    if(currentId===p.id)currentId=null;
+    renderHome();toast('Board deleted');
+  }catch(e){
+    console.warn('Board delete',e);toast('Could not delete board');
+  }finally{btn.disabled=false;btn.textContent='Delete board'}
+};
