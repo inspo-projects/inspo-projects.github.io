@@ -18,6 +18,12 @@ window.inspoCloudApi={
     if(error)throw error;
     return true;
   },
+  toggleSavedItem:async(boardId,itemId)=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {data,error}=await sb.rpc('toggle_item_saved',{bid:boardId,iid:itemId});
+    if(error)throw error;
+    return data===true;
+  },
   deleteItem:async(boardId,itemId)=>{
     if(!cloudUser)throw new Error('Sign in required');
     const {error}=await sb.from('items').delete().eq('board_id',boardId).eq('id',itemId);
