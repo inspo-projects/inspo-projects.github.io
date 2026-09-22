@@ -1,5 +1,40 @@
 let detailAttempted=new Set();
 const hydratingBoards=new Set();
+const depopRetryCounts=new Map();
+const depopRetryTimers=new Map();
+
+function scheduleDepopRetry(boardId,itemId){
+  const key=boardId+':'+itemId;
+  if(depopRetryTimers.has(key))return;
+  const count=depopRetryCounts.get(key)||0;
+  if(count>=4)return;
+
+  const delays=[5000,12000,25000,45000];
+  const timer=setTimeout(async()=>{
+    depopRetryTimers.delete(key);
+    depopRetryCounts.set(key,count+1);
+
+    const b=projects.find(p=>p.id===boardId);
+    const x=b?.items?.find(i=>i.id===itemId);
+    if(!x||!isDepopUrl(x.url)||x.image){
+      depopRetryCounts.delete(key);
+      return;
+    }
+
+    detailAttempted.delete(itemId);
+    try{await hydrateBoardDetails(boardId)}catch(e){}
+
+    const refreshed=projects.find(p=>p.id===boardId)?.items?.find(i=>i.id===itemId);
+    if(refreshed?.image){
+      depopRetryCounts.delete(key);
+      depopRetryTimers.delete(key);
+      return;
+    }
+    scheduleDepopRetry(boardId,itemId);
+  },delays[count]);
+
+  depopRetryTimers.set(key,timer);
+}
 
 async function hydrateBoardDetails(boardId){
   const b=projects.find(p=>p.id===boardId);
@@ -33,6 +68,7 @@ async function hydrateBoardDetails(boardId){
         }catch(e){}
         x._priceLoading=false;
         x._priceChecked=true;
+        if(isDepopUrl(x.url)&&!x.image)scheduleDepopRetry(boardId,x.id);
       }));
       if(currentId===boardId)renderBoard();
     }
@@ -49,7 +85,7 @@ async function hydrateMissing(){
     for(const x of (b.items||[])){
       if(x.url&&!x.image){
         try{
-          const d=await preview(x.url);
+          const d=isDepopUrl(x.url)?await previewDetails(x.url):await preview(x.url);
           const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url);
           if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
           if(d.title&&(genericListingTitle(x.title)||(amazon&&/^Amazon\.com(?::|$)/i.test(String(x.title||'').trim())))){x.title=d.title;changed=true}
