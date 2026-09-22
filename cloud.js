@@ -12,6 +12,19 @@ window.inspoCloudApi={
   getUser:()=>cloudUser,
   getProfile:()=>cloudProfile,
   sync:()=>syncNow(),
+  deleteItem:async(boardId,itemId)=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {error}=await sb.from('items').delete().eq('board_id',boardId).eq('id',itemId);
+    if(error)throw error;
+    return true;
+  },
+  deleteBoard:async boardId=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {error}=await sb.from('boards').delete().eq('id',boardId).eq('owner_id',cloudUser.id);
+    if(error)throw error;
+    ownedIds.delete(boardId);
+    return true;
+  },
   saveItemToBoard:async(p,x)=>{
     if(!cloudUser)throw new Error('Sign in required');
     if(!p||!x)throw new Error('Missing board or find');
@@ -305,14 +318,13 @@ async function syncAll(force=false){
         const x=p.items[pos]; if(!uuidRe.test(x.id))x.id=crypto.randomUUID();localIds.add(x.id);
         await sb.from('items').upsert({id:x.id,board_id:p.id,created_by:x._createdBy||cloudUser.id,source_url:safeHttpUrl(x.url)||null,source_name:x.source||null,title:x.title||'Untitled find',image_url:safeImageUrl(x.image)||null,tag:x.tag||null,price:x.price||null,size:x.size||null,reviews:x.reviews||null,condition:x.condition||null,position:pos});
       }
-      const {data:dbItems}=await sb.from('items').select('id').eq('board_id',p.id);
-      const stale=(dbItems||[]).map(r=>r.id).filter(id=>!localIds.has(id)); if(stale.length)await sb.from('items').delete().in('id',stale);
+      // Never infer a deletion from a local snapshot. A stale cache must not be able to erase cloud finds.
       await sb.from('saved_items').delete().eq('board_id',p.id).eq('user_id',cloudUser.id);
       const saves=(p.saved||[]).filter(id=>localIds.has(id)).map(item_id=>({board_id:p.id,item_id,user_id:cloudUser.id}));
       if(saves.length)await sb.from('saved_items').insert(saves);
     }
-    for(const id of ownedIds){if(!presentOwned.has(id)){await sb.from('boards').delete().eq('id',id)}}
-    ownedIds=presentOwned; saveLocal();
+    // Never infer board deletion from a missing local card. Boards are deleted only by an explicit user action.
+    ownedIds=new Set([...ownedIds,...presentOwned]); saveLocal();
   }catch(e){console.warn('Cloud sync',e);throw e}finally{syncing=false}
 }
 persist=function(){saveLocal();if(cloudUser&&!reloading){clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncAll(false),450)}};
