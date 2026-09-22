@@ -47,23 +47,49 @@ function renderSwipe(){
 }
 function showMainImage(x){const im=$('#pic'),ph=$('#ph'),src=safeImageUrl(x.image);if(src){im.hidden=false;ph.hidden=true;im.src=src;im.alt=x.title||'';im.referrerPolicy='no-referrer';im.onerror=()=>{im.hidden=true;ph.hidden=false}}else{im.hidden=true;ph.hidden=false}}
 function renderThumbs(a){const t=$('#thumbs'),b=current();a.forEach((x,i)=>{const bt=document.createElement('button');bt.className='thumb'+(i===idx?' on':'');const thumbSrc=safeImageUrl(x.image);if(thumbSrc){const im=document.createElement('img');im.src=thumbSrc;im.alt='';im.referrerPolicy='no-referrer';im.onerror=()=>im.remove();bt.appendChild(im)}if((b.saved||[]).includes(x.id)){const h=document.createElement('span');h.className='mh';h.textContent='♥';bt.appendChild(h)}bt.onclick=()=>{idx=i;renderSwipe();bt.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'})};t.appendChild(bt)})}
-function toggleSavedItem(x){
+async function toggleSavedItem(x){
   const b=current();if(!b||!x)return;
   b.saved=b.saved||[];
-  const at=b.saved.indexOf(x.id),wasSaved=at>=0;
+  const at=b.saved.indexOf(x.id),wasSaved=at>=0,wantSaved=!wasSaved;
+  const previousFaces=[...(b._favoriteFaces?.[x.id]||[])];
+
   if(wasSaved)b.saved.splice(at,1);else b.saved.push(x.id);
+
   b._favoriteFaces=b._favoriteFaces||{};
   const user=window.inspoCloudApi?.getUser?.(),profile=window.inspoCloudApi?.getProfile?.();
-  let faces=b._favoriteFaces[x.id]||[];
-  if(user){
-    faces=faces.filter(f=>f.user_id!==user.id);
-    if(!wasSaved)faces.push({user_id:user.id,display_name:profile?.display_name||user.email?.split('@')[0]||'You',avatar_url:profile?.avatar_url||''});
-    b._favoriteFaces[x.id]=faces;
+  let faces=previousFaces.filter(f=>f.user_id!==user?.id);
+  if(user&&wantSaved){
+    faces.push({
+      user_id:user.id,
+      display_name:profile?.display_name||user.email?.split('@')[0]||'You',
+      avatar_url:profile?.avatar_url||''
+    });
   }
-  b.updated=now();persist();
-  toast(wasSaved?'Removed from saved':'Saved ♡');
-  if(filter==='saved'&&wasSaved&&idx>=boardList().length)idx=Math.max(0,boardList().length-1);
+  b._favoriteFaces[x.id]=faces;
+  saveLocal();
   renderBoard();
+
+  try{
+    if(window.inspoCloudApi?.setSavedItem){
+      await window.inspoCloudApi.setSavedItem(b.id,x.id,wantSaved);
+    }else{
+      persist();
+    }
+    if(window.inspoCloudApi?.refreshFavoriteFaces)await window.inspoCloudApi.refreshFavoriteFaces();
+    toast(wantSaved?'Saved ♡':'Removed from saved');
+  }catch(e){
+    console.warn('Like sync',e);
+    b.saved=b.saved||[];
+    const nowAt=b.saved.indexOf(x.id);
+    if(wasSaved&&nowAt<0)b.saved.push(x.id);
+    if(!wasSaved&&nowAt>=0)b.saved.splice(nowAt,1);
+    b._favoriteFaces[x.id]=previousFaces;
+    saveLocal();
+    renderBoard();
+    toast('Could not sync that like. Try again.');
+  }
+
+  if(filter==='saved'&&!wantSaved&&idx>=boardList().length)idx=Math.max(0,boardList().length-1);
 }
 function renderGrid(){
   const a=boardList(),g=$('#moodgrid');g.innerHTML='';$('#emptyGrid').hidden=a.length>0;
