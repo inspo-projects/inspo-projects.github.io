@@ -1,7 +1,11 @@
-const CACHE='inspo-projects-v3';
+const CACHE='inspo-projects-v4';
 
 self.addEventListener('install',()=>self.skipWaiting());
-self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+  const keys=await caches.keys();
+  await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
+  await self.clients.claim();
+})()));
 
 async function handleShare(request){
   try{
