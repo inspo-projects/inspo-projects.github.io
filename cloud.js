@@ -5,7 +5,7 @@ const SUPABASE_KEY='sb_publishable_gV3fjp4nxKlMQP2qGoy65A_5Wtd-WA-';
 const APP_URL='https://inspo-projects.github.io/';
 if(!window.supabase)return;
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,detectSessionInUrl:true}});
-let cloudUser=null,cloudProfile=null,syncTimer=null,syncing=false,reloading=false,channel=null,ownedIds=new Set(),googleEnabled=false;
+let cloudUser=null,cloudProfile=null,syncTimer=null,syncing=false,reloading=false,channel=null,ownedIds=new Set(),googleEnabled=false,recoveryCandidate=null;
 const uuidRe=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const legacyPersist=persist;
 window.inspoCloudApi={
@@ -349,6 +349,66 @@ function dbBoardToLocal(b,items,saved,members){
   const role=b.owner_id===cloudUser.id?'owner':((members||[]).find(m=>m.board_id===b.id&&m.user_id===cloudUser.id)?.role||'viewer');
   return{id:b.id,type:b.board_type,icon:b.icon||'✦',title:b.title,subtitle:b.subtitle||'',created:Date.parse(b.created_at),updated:Date.parse(b.updated_at),items:its,saved:(saved||[]).filter(s=>s.board_id===b.id&&s.user_id===cloudUser.id).map(s=>s.item_id),_cloud:true,_ownerId:b.owner_id,_role:role,_shareToken:b.share_token,_collaborateToken:b.collaborate_token,_visibility:b.visibility};
 }
+
+function recoveryKey(){return cloudUser?'inspoRecoveryCandidate_'+cloudUser.id:''}
+function captureRecoveryCandidate(localProjects,cloudProjects){
+  if(!cloudUser||!Array.isArray(localProjects)||!Array.isArray(cloudProjects))return;
+  const missing=[];
+  for(const localBoard of localProjects){
+    const cloudBoard=cloudProjects.find(p=>p.id===localBoard.id);
+    if(!cloudBoard||!Array.isArray(localBoard.items))continue;
+    const cloudIds=new Set((cloudBoard.items||[]).map(x=>x.id));
+    const cloudUrls=new Set((cloudBoard.items||[]).map(x=>x.url).filter(Boolean));
+    for(const x of localBoard.items){
+      if(!x)continue;
+      if(cloudIds.has(x.id)||(x.url&&cloudUrls.has(x.url)))continue;
+      missing.push({boardId:localBoard.id,item:x});
+    }
+  }
+  if(missing.length){
+    recoveryCandidate={created:Date.now(),missing};
+    try{localStorage.setItem(recoveryKey(),JSON.stringify(recoveryCandidate))}catch(e){}
+  }else{
+    try{
+      const saved=safeJSON(localStorage.getItem(recoveryKey()),null);
+      if(saved?.missing?.length)recoveryCandidate=saved;
+    }catch(e){}
+  }
+}
+function showRecoveryOption(){
+  const home=document.querySelector('.home-actions');if(!home)return;
+  let btn=$('#recoverDeviceFinds');
+  const count=recoveryCandidate?.missing?.length||0;
+  if(!count){if(btn)btn.remove();return}
+  if(!btn){
+    btn=document.createElement('button');
+    btn.id='recoverDeviceFinds';btn.className='secondary recovery-btn';
+    home.insertAdjacentElement('afterend',btn);
+    btn.onclick=async()=>{
+      const candidate=recoveryCandidate;
+      if(!candidate?.missing?.length)return;
+      if(!confirm('This device has '+candidate.missing.length+' finds that are missing from the cloud. Restore them?'))return;
+      btn.disabled=true;btn.textContent='Recovering…';
+      let restored=0;
+      try{
+        for(const row of candidate.missing){
+          const board=projects.find(p=>p.id===row.boardId);
+          if(!board)continue;
+          const x={...row.item};
+          if(!uuidRe.test(x.id))x.id=crypto.randomUUID();
+          await window.inspoCloudApi.saveItemToBoard(board,x);
+          restored++;
+        }
+        localStorage.removeItem(recoveryKey());recoveryCandidate=null;
+        await loadCloud();
+        toast(restored+' find'+(restored===1?'':'s')+' recovered');
+      }catch(e){
+        console.warn('Recovery',e);toast('Recovery stopped. Your saved recovery copy is still here.');
+      }finally{btn.disabled=false;showRecoveryOption()}
+    };
+  }
+  btn.textContent='↺ Recover '+count+' find'+(count===1?'':'s')+' from this device';
+}
 async function loadCloud(){
   if(!cloudUser)return;reloading=true;
   try{
@@ -363,9 +423,12 @@ async function loadCloud(){
       normalizeIds();for(const p of projects){p._ownerId=cloudUser.id;p._role='owner';p._cloud=false}await syncAll(true);
       return loadCloud();
     }
-    projects=(boards||[]).map(b=>dbBoardToLocal(b,items,saved,members));
+    const localBeforeCloud=Array.isArray(projects)?projects.map(p=>({...p,items:[...(p.items||[])],saved:[...(p.saved||[])]})):[];
+    const cloudProjects=(boards||[]).map(b=>dbBoardToLocal(b,items,saved,members));
+    captureRecoveryCandidate(localBeforeCloud,cloudProjects);
+    projects=cloudProjects;
     ownedIds=new Set(projects.filter(p=>p._role==='owner').map(p=>p.id));
-    saveLocal();currentId=null;renderHome();
+    saveLocal();currentId=null;renderHome();showRecoveryOption();
     loadFavoriteFacesForBoards().then(()=>{if(currentId)renderBoard();else renderHome()}).catch(e=>console.warn('Favorite faces',e));
   }catch(e){console.warn(e);toast('Could not load cloud boards')}finally{reloading=false}
 }
