@@ -12,6 +12,12 @@ window.inspoCloudApi={
   getUser:()=>cloudUser,
   getProfile:()=>cloudProfile,
   sync:()=>syncNow(),
+  setSavedItem:async(boardId,itemId,wantSaved)=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {error}=await sb.rpc('set_item_saved',{bid:boardId,iid:itemId,want_saved:!!wantSaved});
+    if(error)throw error;
+    return true;
+  },
   deleteItem:async(boardId,itemId)=>{
     if(!cloudUser)throw new Error('Sign in required');
     const {error}=await sb.from('items').delete().eq('board_id',boardId).eq('id',itemId);
@@ -319,9 +325,7 @@ async function syncAll(force=false){
         await sb.from('items').upsert({id:x.id,board_id:p.id,created_by:x._createdBy||cloudUser.id,source_url:safeHttpUrl(x.url)||null,source_name:x.source||null,title:x.title||'Untitled find',image_url:safeImageUrl(x.image)||null,tag:x.tag||null,price:x.price||null,size:x.size||null,reviews:x.reviews||null,condition:x.condition||null,position:pos});
       }
       // Never infer a deletion from a local snapshot. A stale cache must not be able to erase cloud finds.
-      await sb.from('saved_items').delete().eq('board_id',p.id).eq('user_id',cloudUser.id);
-      const saves=(p.saved||[]).filter(id=>localIds.has(id)).map(item_id=>({board_id:p.id,item_id,user_id:cloudUser.id}));
-      if(saves.length)await sb.from('saved_items').insert(saves);
+      // Likes are synced only by the explicit like/unlike action. General board sync must never rewrite them.
     }
     // Never infer board deletion from a missing local card. Boards are deleted only by an explicit user action.
     ownedIds=new Set([...ownedIds,...presentOwned]); saveLocal();
@@ -488,11 +492,25 @@ function subscribeRealtime(){
   channel=sb.channel('inspo-cloud')
     .on('postgres_changes',{event:'*',schema:'public',table:'boards'},scheduleReload)
     .on('postgres_changes',{event:'*',schema:'public',table:'items'},scheduleReload)
-    .on('postgres_changes',{event:'*',schema:'public',table:'saved_items'},scheduleReload)
+    .on('postgres_changes',{event:'*',schema:'public',table:'saved_items'},scheduleLikeRefresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'board_members'},scheduleReload)
     .subscribe()
 }
-let reloadTimer=null;function scheduleReload(){if(syncing)return;clearTimeout(reloadTimer);reloadTimer=setTimeout(async()=>{const open=currentId;await loadCloud();if(open&&projects.some(p=>p.id===open))openBoard(open)},650)}
+let reloadTimer=null,likeRefreshTimer=null;
+function scheduleReload(){
+  if(syncing)return;
+  clearTimeout(reloadTimer);
+  reloadTimer=setTimeout(async()=>{const open=currentId;await loadCloud();if(open&&projects.some(p=>p.id===open))openBoard(open)},650)
+}
+function scheduleLikeRefresh(){
+  clearTimeout(likeRefreshTimer);
+  likeRefreshTimer=setTimeout(async()=>{
+    try{
+      await loadFavoriteFacesForBoards();
+      if(currentId)renderBoard();else renderHome();
+    }catch(e){console.warn('Like refresh',e)}
+  },250)
+}
 async function onSession(session){
   cloudUser=session?.user||null;
   if(!cloudUser){projects=[];currentId=null;$('#cloudUserBar').hidden=true;showGate();window.dispatchEvent(new CustomEvent('inspo-session',{detail:{signedIn:false}}));return}
@@ -507,6 +525,15 @@ async function onSession(session){
   joinPending().catch(e=>console.warn('Pending join',e));
   window.dispatchEvent(new CustomEvent('inspo-session',{detail:{signedIn:true}}))
 }
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&cloudUser){
+    loadFavoriteFacesForBoards().then(()=>{if(currentId)renderBoard()}).catch(()=>{});
+  }
+});
+window.addEventListener('focus',()=>{
+  if(cloudUser)loadFavoriteFacesForBoards().then(()=>{if(currentId)renderBoard()}).catch(()=>{});
+});
+
 async function start(){
   injectUI();await loadAuthCapabilities();showGate('Loading your private boards…');
   const viewToken=tokenFromUrl('view');
