@@ -104,7 +104,9 @@ $('#saveFind').onclick=async()=>{
       if(wasSaved)target.saved.push(moved.id);
       b.updated=now();target.updated=now();
       persist();
-      if(window.inspoCloudApi&&window.inspoCloudApi.sync)await window.inspoCloudApi.sync();
+      if(window.inspoCloudApi?.saveItemToBoard)await window.inspoCloudApi.saveItemToBoard(target,moved);
+      if(window.inspoCloudApi?.deleteItem)await window.inspoCloudApi.deleteItem(b.id,original.id);
+      else if(window.inspoCloudApi?.sync)await window.inspoCloudApi.sync();
       $('#saveFind').disabled=false;
       closeModal('findModal');
       idx=0;filter='all';
@@ -123,4 +125,17 @@ $('#saveFind').onclick=async()=>{
   closeModal('findModal');idx=0;filter='all';renderBoard();
   toast(editItemId?'Find updated':'Added to board');
 };
-$('#deleteFind').onclick=()=>{const b=current(),x=b?.items.find(i=>i.id===editItemId);if(!x)return;if(!confirm('Remove this find from the board?'))return;b.items=b.items.filter(i=>i.id!==x.id);b.saved=(b.saved||[]).filter(id=>id!==x.id);b.updated=now();persist();closeModal('findModal');idx=0;renderBoard();toast('Find removed')};
+$('#deleteFind').onclick=async()=>{
+  const b=current(),x=b?.items.find(i=>i.id===editItemId);if(!x)return;
+  if(!confirm('Remove this find from the board?'))return;
+  const btn=$('#deleteFind');btn.disabled=true;btn.textContent='Removing…';
+  try{
+    if(window.inspoCloudApi?.deleteItem&&b._cloud)await window.inspoCloudApi.deleteItem(b.id,x.id);
+    b.items=b.items.filter(i=>i.id!==x.id);
+    b.saved=(b.saved||[]).filter(id=>id!==x.id);
+    b.updated=now();saveLocal();
+    closeModal('findModal');idx=0;renderBoard();toast('Find removed');
+  }catch(e){
+    console.warn('Find delete',e);toast('Could not remove find');
+  }finally{btn.disabled=false;btn.textContent='Remove from board'}
+};
