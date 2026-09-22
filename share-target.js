@@ -277,7 +277,7 @@ function openPhoneSetup(){
 window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();installPrompt=e});
 window.addEventListener('appinstalled',function(){installPrompt=null;toast('Inspo Projects installed')});
 window.addEventListener('inspo-session',function(e){if(e.detail&&e.detail.signedIn)setTimeout(openPending,50)});
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(function(){})}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js?v=4',{updateViaCache:'none'}).catch(function(){})}
 captureIncoming();
 ensureUI();
 setTimeout(function(){if(currentUser())openPending()},700);
