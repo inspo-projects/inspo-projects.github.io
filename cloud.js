@@ -11,6 +11,7 @@ const legacyPersist=persist;
 window.inspoCloudApi={
   getUser:()=>cloudUser,
   getProfile:()=>cloudProfile,
+  saveLocalOnly:()=>saveLocal(),
   sync:()=>syncNow(),
   setSavedItem:async(boardId,itemId,wantSaved)=>{
     if(!cloudUser)throw new Error('Sign in required');
