@@ -166,20 +166,32 @@ async function openPending(){
       if(b&&!targets.some(function(t){return t.id===b.id}))targets.push(b);
     }
 
-    var savedBoards=[],skipped=0,failed=0;
+    var savedBoards=[],skipped=0,failed=0,pending=[];
     for(var b of targets){
       b.items=b.items||[];
       if(info.url&&b.items.some(function(x){return x.url===info.url})){skipped++;continue}
       var item={id:crypto.randomUUID(),url:info.url,title:info.title,image:info.image,tag:'',source:info.source,price:info.price,size:info.size,reviews:info.reviews,condition:info.condition,detailsChecked:Date.now(),_createdBy:user.id};
-      b.items.unshift(item);b.updated=now();saveLocal();
-      try{
-        if(window.inspoCloudApi&&window.inspoCloudApi.saveItemToBoard)await window.inspoCloudApi.saveItemToBoard(b,item);
-        else if(window.inspoCloudApi&&window.inspoCloudApi.sync)await window.inspoCloudApi.sync();
-        savedBoards.push(b);
-      }catch(e){
-        failed++;b.items=b.items.filter(function(x){return x.id!==item.id});saveLocal();
-      }
+      b.items.unshift(item);b.updated=now();
+      pending.push({board:b,item:item});
     }
+
+    if(window.inspoCloudApi?.saveLocalOnly)window.inspoCloudApi.saveLocalOnly();
+
+    var results=await Promise.allSettled(pending.map(function(row){
+      if(window.inspoCloudApi&&window.inspoCloudApi.saveItemToBoard)return window.inspoCloudApi.saveItemToBoard(row.board,row.item);
+      if(window.inspoCloudApi&&window.inspoCloudApi.sync)return window.inspoCloudApi.sync();
+      return Promise.resolve(true);
+    }));
+
+    results.forEach(function(result,i){
+      var row=pending[i];
+      if(result.status==='fulfilled')savedBoards.push(row.board);
+      else{
+        failed++;
+        row.board.items=row.board.items.filter(function(x){return x.id!==row.item.id});
+      }
+    });
+    if(failed&&window.inspoCloudApi?.saveLocalOnly)window.inspoCloudApi.saveLocalOnly();
 
     if(!savedBoards.length&&failed){
       btn.disabled=false;btn.textContent='Save find';status.textContent='Could not save the find. Try again.';return;
