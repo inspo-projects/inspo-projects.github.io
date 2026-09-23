@@ -110,6 +110,19 @@ window.inspoCloudApi={
     if(error)throw error;
     return true;
   },
+  getNotifications:async(limit=50)=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {data,error}=await sb.rpc('my_notifications',{limit_count:limit});
+    if(error)throw error;
+    return data||[];
+  },
+  markNotificationsRead:async ids=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const clean=Array.isArray(ids)&&ids.length?ids:null;
+    const {error}=await sb.rpc('mark_notifications_read',{notification_ids:clean});
+    if(error)throw error;
+    return true;
+  },
   previewEbay:async url=>{
     if(!cloudUser)throw new Error('Sign in required');
     const {data,error}=await sb.functions.invoke('ebay-preview',{body:{url}});
@@ -524,6 +537,7 @@ function subscribeRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'items'},scheduleReload)
     .on('postgres_changes',{event:'*',schema:'public',table:'saved_items'},scheduleLikeRefresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'item_comments'},()=>window.dispatchEvent(new CustomEvent('inspo-comments-changed')))
+    .on('postgres_changes',{event:'*',schema:'public',table:'notifications'},payload=>window.dispatchEvent(new CustomEvent('inspo-notifications-changed',{detail:payload})))
     .on('postgres_changes',{event:'*',schema:'public',table:'board_members'},scheduleReload)
     .subscribe()
 }
