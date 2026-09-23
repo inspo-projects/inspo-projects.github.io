@@ -78,20 +78,31 @@
     source=source||sourceName(url);title=title||source+' find';
 
     let added=0,skipped=0,failed=0;
-    const user=window.inspoCloudApi?.getUser?.();
+    const user=window.inspoCloudApi?.getUser?.(),pending=[];
     for(const b of targets){
       b.items=b.items||[];
       if(url&&b.items.some(x=>x.url===url)){skipped++;continue}
       const item={id:crypto.randomUUID(),url,title,image,tag,source,price,size,reviews,condition,detailsChecked,_createdBy:user?.id};
-      b.items.unshift(item);b.updated=now();saveLocal();
-      try{
-        if(window.inspoCloudApi?.saveItemToBoard)await window.inspoCloudApi.saveItemToBoard(b,item);
-        else persist();
-        added++;
-      }catch(err){
-        failed++;b.items=b.items.filter(x=>x.id!==item.id);saveLocal();
-      }
+      b.items.unshift(item);b.updated=now();
+      pending.push({board:b,item});
     }
+
+    if(window.inspoCloudApi?.saveLocalOnly)window.inspoCloudApi.saveLocalOnly();
+
+    const results=await Promise.allSettled(pending.map(row=>{
+      if(window.inspoCloudApi?.saveItemToBoard)return window.inspoCloudApi.saveItemToBoard(row.board,row.item);
+      return Promise.resolve(true);
+    }));
+
+    results.forEach((result,i)=>{
+      const row=pending[i];
+      if(result.status==='fulfilled')added++;
+      else{
+        failed++;
+        row.board.items=row.board.items.filter(x=>x.id!==row.item.id);
+      }
+    });
+    if(failed&&window.inspoCloudApi?.saveLocalOnly)window.inspoCloudApi.saveLocalOnly();
 
     saveBtn.disabled=false;saveBtn.textContent='Add to board';
     if(!added&&failed){status.textContent='Could not save this find. Try again.';return}
