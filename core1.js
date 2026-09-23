@@ -26,7 +26,7 @@ function sourceName(url,publisher=''){
   let host='';try{host=new URL(url).hostname.toLowerCase()}catch{}
   const p=String(publisher||'').toLowerCase();
   const has=s=>host.includes(s)||p.includes(s);
-  if(has('vinted'))return'Vinted';if(has('amazon')||host==='a.co')return'Amazon';if(has('poshmark'))return'Poshmark';if(has('pinterest'))return'Pinterest';if(has('etsy'))return'Etsy';if(has('target'))return'Target';if(has('walmart'))return'Walmart';if(has('ebay'))return'eBay';if(has('depop'))return'Depop';
+  if(has('vinted'))return'Vinted';if(has('amazon')||host==='a.co')return'Amazon';if(has('poshmark'))return'Poshmark';if(has('pinterest'))return'Pinterest';if(has('etsy'))return'Etsy';if(has('target'))return'Target';if(has('walmart'))return'Walmart';if(has('ebay'))return'eBay';if(has('depop'))return'Depop';if(has('facebook')||host==='fb.me'||host==='fb.watch')return'Facebook';
   if(publisher)return publisher.replace(/\s*\|.*$/,'').replace(/^www\./i,'').trim();
   if(!host)return'Inspo';return host.replace(/^www\./,'').split('.')[0].replace(/^./,c=>c.toUpperCase())
 }
@@ -43,5 +43,5 @@ function renderHome(){
     wrap.appendChild(btn);
   });
 }
-function openBoard(id){currentId=id;filter='all';idx=0;viewMode='grid';savedMode='browse';$('#homeView').hidden=true;$('#boardView').hidden=false;window.scrollTo(0,0);renderBoard();setTimeout(()=>{if(typeof hydrateBoardDetails==='function')hydrateBoardDetails(id)},120)}
+function openBoard(id){currentId=id;filter='all';idx=0;viewMode='grid';savedMode='browse';$('#homeView').hidden=true;$('#boardView').hidden=false;window.scrollTo(0,0);renderBoard();setTimeout(()=>{if(typeof hydrateBoardDetails==='function')hydrateBoardDetails(id);window.inspoComments?.load(id)},120)}
 function boardList(){const b=current();if(!b)return[];const items=b.items||[];if(filter==='all')return items;if(filter==='saved')return items.filter(x=>(b.saved||[]).includes(x.id));return items.filter(x=>x.source===filter)}
