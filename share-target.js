@@ -132,65 +132,63 @@ async function openPending(){
   var info=await previewShared(data);
   if(!sharedOpen)return false;
   var boards=boardOptions();
-  var options='';
+  var defaultBoard=(typeof currentId!=='undefined'&&boards.some(function(b){return b.id===currentId}))?currentId:(boards[0]&&boards[0].id);
+  var boardChoices='<div id="sharedBoardChoices" class="board-multi-list">';
   boards.forEach(function(b){
-    options+='<option value="'+escapeHTML(b.id)+'">'+escapeHTML((b.icon?b.icon+' ':'')+b.title)+'</option>';
+    boardChoices+='<label class="board-multi-option"><input type="checkbox" name="sharedBoard" value="'+escapeHTML(b.id)+'" '+(b.id===defaultBoard?'checked':'')+'><span>'+escapeHTML((b.icon?b.icon+' ':'')+b.title)+'</span></label>';
   });
-  options+='<option value="__quick__">＋ Quick Saves</option>';
+  boardChoices+='<label class="board-multi-option"><input type="checkbox" name="sharedBoard" value="__quick__" '+(!boards.length?'checked':'')+'><span>✦ Quick Saves</span></label></div>';
   q('sharedFindBody').innerHTML=
     '<div class="shared-preview">'+
       (info.image?'<img src="'+escapeHTML(info.image)+'" alt="" referrerpolicy="no-referrer">':'<div class="shared-preview-ph">✦</div>')+
       '<div><span>'+escapeHTML(info.source||'Inspo')+'</span><b>'+escapeHTML(info.title||'Shared find')+'</b>'+
       '<small>'+escapeHTML(info.price||'')+'</small></div>'+
     '</div>'+
-    '<div class="field"><label>Save to</label><select id="sharedBoardSelect">'+options+'</select></div>'+
+    '<div class="field"><label>Save to one or more boards</label>'+boardChoices+'<div id="sharedBoardStatus" class="hintline"></div></div>'+
     '<button id="saveSharedFind" class="primary">Save find</button>'+
     '<button id="cancelSharedFind" class="share-cancel">Not now</button>';
   q('cancelSharedFind').onclick=function(){closeShared(true)};
   q('saveSharedFind').onclick=async function(){
-    var btn=q('saveSharedFind');
-    btn.disabled=true;btn.textContent='Saving…';
-    var id=q('sharedBoardSelect').value;
-    var b=(projects||[]).find(function(x){return x.id===id});
-    var user=currentUser();
-    if(id==='__quick__'||!b){
-      b=(projects||[]).find(function(x){return x._role==='owner'&&x.title==='Quick Saves'});
-      if(!b){
-        b={
-          id:crypto.randomUUID(),type:'inspo',icon:'✦',title:'Quick Saves',
-          subtitle:'Things I shared to Inspo Projects.',created:now(),updated:now(),
-          items:[],saved:[],_ownerId:user.id,_role:'owner',_cloud:false
-        };
-        projects.unshift(b);
+    var btn=q('saveSharedFind'),status=q('sharedBoardStatus');
+    var ids=Array.from(document.querySelectorAll('input[name="sharedBoard"]:checked')).map(function(el){return el.value});
+    if(!ids.length){status.textContent='Choose at least one board.';return}
+    btn.disabled=true;btn.textContent='Saving…';status.textContent='';
+    var user=currentUser(),targets=[];
+    for(var id of ids){
+      var b=(projects||[]).find(function(x){return x.id===id});
+      if(id==='__quick__'){
+        b=(projects||[]).find(function(x){return x._role==='owner'&&x.title==='Quick Saves'});
+        if(!b){
+          b={id:crypto.randomUUID(),type:'inspo',icon:'✦',title:'Quick Saves',subtitle:'Things I shared to Inspo Projects.',created:now(),updated:now(),items:[],saved:[],_ownerId:user.id,_role:'owner',_cloud:false};
+          projects.unshift(b);
+        }
+      }
+      if(b&&!targets.some(function(t){return t.id===b.id}))targets.push(b);
+    }
+
+    var savedBoards=[],skipped=0,failed=0;
+    for(var b of targets){
+      b.items=b.items||[];
+      if(info.url&&b.items.some(function(x){return x.url===info.url})){skipped++;continue}
+      var item={id:crypto.randomUUID(),url:info.url,title:info.title,image:info.image,tag:'',source:info.source,price:info.price,size:info.size,reviews:info.reviews,condition:info.condition,detailsChecked:Date.now(),_createdBy:user.id};
+      b.items.unshift(item);b.updated=now();saveLocal();
+      try{
+        if(window.inspoCloudApi&&window.inspoCloudApi.saveItemToBoard)await window.inspoCloudApi.saveItemToBoard(b,item);
+        else if(window.inspoCloudApi&&window.inspoCloudApi.sync)await window.inspoCloudApi.sync();
+        savedBoards.push(b);
+      }catch(e){
+        failed++;b.items=b.items.filter(function(x){return x.id!==item.id});saveLocal();
       }
     }
-    if((b.items||[]).some(function(x){return x.url===info.url})){
-      localStorage.removeItem(PENDING_KEY);closeShared(false);openBoard(b.id);toast('Already on this board');return;
+
+    if(!savedBoards.length&&failed){
+      btn.disabled=false;btn.textContent='Save find';status.textContent='Could not save the find. Try again.';return;
     }
-    b.items=b.items||[];
-    var item={
-      id:crypto.randomUUID(),url:info.url,title:info.title,image:info.image,tag:'',
-      source:info.source,price:info.price,size:info.size,reviews:info.reviews,
-      condition:info.condition,detailsChecked:Date.now(),_createdBy:user.id
-    };
-    b.items.unshift(item);
-    b.updated=now();
-    persist();
-    try{
-      if(window.inspoCloudApi&&window.inspoCloudApi.saveItemToBoard){
-        await window.inspoCloudApi.saveItemToBoard(b,item);
-      }else if(window.inspoCloudApi&&window.inspoCloudApi.sync){
-        await window.inspoCloudApi.sync();
-      }
-    }catch(e){
-      b.items=b.items.filter(function(x){return x.id!==item.id});
-      persist();
-      btn.disabled=false;btn.textContent='Save find';
-      toast('Could not save this find. Try again.');
-      return;
-    }
-    localStorage.removeItem(PENDING_KEY);
-    closeShared(false);openBoard(b.id);toast('Saved to '+b.title);
+    localStorage.removeItem(PENDING_KEY);closeShared(false);
+    if(savedBoards[0])openBoard(savedBoards[0].id);
+    var msg=savedBoards.length?'Saved to '+savedBoards.length+' board'+(savedBoards.length===1?'':'s'):'Already on the selected board'+(targets.length===1?'':'s');
+    if(skipped&&savedBoards.length)msg+=' · '+skipped+' already had it';
+    toast(msg);
   };
   return true;
 }
