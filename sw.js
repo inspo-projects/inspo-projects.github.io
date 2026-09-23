@@ -34,3 +34,15 @@ self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET')return;
   event.respondWith(fetch(event.request).catch(()=>caches.match(event.request)));
 });
+
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  const url=event.notification.data?.url||'/';
+  event.waitUntil((async()=>{
+    const all=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+    for(const client of all){
+      if('focus' in client){await client.focus();if('navigate' in client)await client.navigate(url);return}
+    }
+    if(self.clients.openWindow)return self.clients.openWindow(url);
+  })());
+});
