@@ -86,6 +86,30 @@ window.inspoCloudApi={
     if(error)throw error;
     return data||{};
   },
+  previewFacebook:async url=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {data,error}=await sb.functions.invoke('facebook-preview',{body:{url}});
+    if(error)throw error;
+    return data||{};
+  },
+  getBoardComments:async boardId=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {data,error}=await sb.rpc('board_item_comments',{bid:boardId});
+    if(error)throw error;
+    return data||[];
+  },
+  addItemComment:async(boardId,itemId,body)=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {data,error}=await sb.rpc('add_item_comment',{bid:boardId,iid:itemId,comment_body:body});
+    if(error)throw error;
+    return data;
+  },
+  deleteItemComment:async commentId=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {error}=await sb.rpc('delete_item_comment',{cid:commentId});
+    if(error)throw error;
+    return true;
+  },
   previewEbay:async url=>{
     if(!cloudUser)throw new Error('Sign in required');
     const {data,error}=await sb.functions.invoke('ebay-preview',{body:{url}});
@@ -499,6 +523,7 @@ function subscribeRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'boards'},scheduleReload)
     .on('postgres_changes',{event:'*',schema:'public',table:'items'},scheduleReload)
     .on('postgres_changes',{event:'*',schema:'public',table:'saved_items'},scheduleLikeRefresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'item_comments'},()=>window.dispatchEvent(new CustomEvent('inspo-comments-changed')))
     .on('postgres_changes',{event:'*',schema:'public',table:'board_members'},scheduleReload)
     .subscribe()
 }
