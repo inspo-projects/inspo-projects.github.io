@@ -50,6 +50,12 @@ function isEbayUrl(url=''){
     return h==='ebay.com'||h.endsWith('.ebay.com')||h==='ebay.us'||h.endsWith('.ebay.us');
   }catch{return false}
 }
+function isFacebookUrl(url=''){
+  try{
+    const h=new URL(url).hostname.toLowerCase();
+    return h==='facebook.com'||h.endsWith('.facebook.com')||h==='fb.me'||h.endsWith('.fb.me')||h==='fb.watch';
+  }catch{return false}
+}
 function depopFallbackUrls(url=''){
   const out=[];const add=v=>{v=safeHttpUrl(v);if(v&&!out.includes(v))out.push(v)};
   add(url);
@@ -68,7 +74,7 @@ function genericListingTitle(value=''){
   const looksLikeShareCode=/^(?=.{8,24}$)(?=.*[a-z])(?=.*[A-Z0-9])[A-Za-z0-9_-]+$/.test(s);
   return !s
     ||looksLikeShareCode
-    ||/^(Amazon|Vinted|Depop|Inspo) (outfit option|find)$/i.test(s)
+    ||/^(Amazon|Vinted|Depop|Facebook|Inspo) (outfit option|find|listing)$/i.test(s)
     ||/^Look what I just found on Depop/i.test(s)
     ||/^Error Page\s*\|\s*eBay$/i.test(s)
     ||/^eBay listing$/i.test(s)
@@ -136,7 +142,25 @@ function amazonProductImage(value=''){
 
 async function previewDetails(url){
   url=safeHttpUrl(url);if(!url)throw new Error('unsafe url');
-  const amazon=isAmazonUrl(url),vinted=isVintedUrl(url),depop=isDepopUrl(url),ebay=isEbayUrl(url),q=new URLSearchParams();
+  const amazon=isAmazonUrl(url),vinted=isVintedUrl(url),depop=isDepopUrl(url),ebay=isEbayUrl(url),facebook=isFacebookUrl(url),q=new URLSearchParams();
+
+  if(facebook&&window.inspoCloudApi?.previewFacebook){
+    try{
+      const direct=await window.inspoCloudApi.previewFacebook(url)||{};
+      return{
+        title:direct.title||'',
+        image:safeImageUrl(direct.image)||'',
+        source:'Facebook',
+        price:direct.price||'',
+        size:'',
+        reviews:'',
+        condition:'',
+        resolvedUrl:safeHttpUrl(direct.resolvedUrl)||''
+      };
+    }catch(e){
+      return{title:'',image:'',source:'Facebook',price:'',size:'',reviews:'',condition:'',resolvedUrl:''};
+    }
+  }
 
   // Amazon is handled by our own server-side reader first.
   // This avoids the free preview endpoint that became unreliable for a.co links.
@@ -333,7 +357,7 @@ async function enrichItem(x,force=false){
     const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url);
     if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
     if(d.title&&(genericListingTitle(x.title)||(amazon&&/^Amazon\.com(?::|$)/i.test(String(x.title||'').trim())))){x.title=d.title;changed=true}
-    if((depop||ebay||amazon)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
+    if((depop||ebay||amazon||facebook)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
     const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
     if(amazon){
       for(const k of ['price','size','reviews'])if(d[k]&&x[k]!==d[k]){x[k]=d[k];changed=true}
