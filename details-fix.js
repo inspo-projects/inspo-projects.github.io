@@ -85,10 +85,10 @@ async function hydrateBoardDetails(boardId){
         x._priceLoading=!x.price;
         try{
           const d=await previewDetails(x.url);
-          const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url),facebook=isFacebookUrl(x.url);
+          const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url),etsy=isEtsyUrl(x.url),facebook=isFacebookUrl(x.url);
           if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
           if(d.title&&(genericListingTitle(x.title)||(amazon&&/^Amazon\.com(?::|$)/i.test(String(x.title||'').trim())))){x.title=d.title;changed=true}
-          if((depop||ebay||amazon||facebook)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
+          if((depop||ebay||amazon||etsy||facebook)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
           if(ebay&&genericListingTitle(x.title)&&!d.title){x.title='eBay listing';changed=true}
           const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
           if(ebay){
@@ -121,11 +121,11 @@ async function hydrateMissing(){
     for(const x of (b.items||[])){
       if(x.url&&!x.image){
         try{
-          const d=(isDepopUrl(x.url)||isFacebookUrl(x.url))?await previewDetails(x.url):await preview(x.url);
-          const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url);
+          const d=(isDepopUrl(x.url)||isFacebookUrl(x.url)||isEtsyUrl(x.url))?await previewDetails(x.url):await preview(x.url);
+          const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url),etsy=isEtsyUrl(x.url),facebook=isFacebookUrl(x.url);
           if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
           if(d.title&&(genericListingTitle(x.title)||(amazon&&/^Amazon\.com(?::|$)/i.test(String(x.title||'').trim())))){x.title=d.title;changed=true}
-          if((depop||ebay||amazon||facebook)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
+          if((depop||ebay||amazon||etsy||facebook)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
           if(ebay&&genericListingTitle(x.title)&&!d.title){x.title='eBay listing';changed=true}
           const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
         }catch(e){}
