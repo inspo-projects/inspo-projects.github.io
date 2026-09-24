@@ -35,6 +35,12 @@ function parseDetails(text=''){
 function isAmazonUrl(url=''){
   try{const h=new URL(url).hostname.toLowerCase();return h==='a.co'||h.includes('amazon.')}catch{return false}
 }
+function isEtsyUrl(url=''){
+  try{
+    const h=new URL(url).hostname.toLowerCase();
+    return h==='etsy.com'||h.endsWith('.etsy.com')||h==='etsy.me'||h.endsWith('.etsy.me');
+  }catch{return false}
+}
 function isVintedUrl(url=''){
   try{return new URL(url).hostname.toLowerCase().includes('vinted.')}catch{return false}
 }
@@ -142,7 +148,7 @@ function amazonProductImage(value=''){
 
 async function previewDetails(url){
   url=safeHttpUrl(url);if(!url)throw new Error('unsafe url');
-  const amazon=isAmazonUrl(url),vinted=isVintedUrl(url),depop=isDepopUrl(url),ebay=isEbayUrl(url),facebook=isFacebookUrl(url),q=new URLSearchParams();
+  const amazon=isAmazonUrl(url),etsy=isEtsyUrl(url),vinted=isVintedUrl(url),depop=isDepopUrl(url),ebay=isEbayUrl(url),facebook=isFacebookUrl(url),q=new URLSearchParams();
 
   if(facebook&&window.inspoCloudApi?.previewFacebook){
     try{
@@ -181,6 +187,28 @@ async function previewDetails(url){
           resolvedUrl:safeHttpUrl(direct.resolvedUrl)||''
         };
       }
+    }catch(e){}
+  }
+
+  if(etsy&&window.inspoCloudApi?.previewEtsy){
+    try{
+      const direct=await window.inspoCloudApi.previewEtsy(url)||{};
+      const title=String(direct.title||'').trim();
+      const image=safeImageUrl(direct.image)||'';
+      const resolvedUrl=safeHttpUrl(direct.resolvedUrl)||'';
+      if(title||image||direct.price){
+        return{
+          title,
+          image,
+          source:'Etsy',
+          price:direct.price||'',
+          size:'',
+          reviews:'',
+          condition:direct.condition||'',
+          resolvedUrl
+        };
+      }
+      if(resolvedUrl)url=resolvedUrl;
     }catch(e){}
   }
 
@@ -354,10 +382,10 @@ async function enrichItem(x,force=false){
   if(!force&&hasDetails&&fresh)return false;
   try{
     const d=await previewDetails(x.url);let changed=false;
-    const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url);
+    const depop=isDepopUrl(x.url),ebay=isEbayUrl(x.url),amazon=isAmazonUrl(x.url),etsy=isEtsyUrl(x.url),facebook=isFacebookUrl(x.url);
     if(d.image&&(!x.image||(depop&&(genericListingTitle(x.title)||genericDepopImage(x.image)))||(amazon&&!amazonProductImage(x.image)))){x.image=d.image;changed=true}
     if(d.title&&(genericListingTitle(x.title)||(amazon&&/^Amazon\.com(?::|$)/i.test(String(x.title||'').trim())))){x.title=d.title;changed=true}
-    if((depop||ebay||amazon||facebook)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
+    if((depop||ebay||amazon||etsy||facebook)&&d.resolvedUrl&&safeHttpUrl(d.resolvedUrl)&&x.url!==d.resolvedUrl){x.url=d.resolvedUrl;changed=true}
     const s=sourceName(x.url,d.source);if(s&&s!==x.source){x.source=s;changed=true}
     if(amazon){
       for(const k of ['price','size','reviews'])if(d[k]&&x[k]!==d[k]){x[k]=d[k];changed=true}
