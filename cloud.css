@@ -40,3 +40,19 @@
 .cloud-user .profile-button{display:flex;align-items:center;gap:7px;border:0;background:transparent;padding:3px 5px 3px 3px;min-width:0}.profile-button-avatar{width:34px;height:34px;border-radius:50%;overflow:hidden;flex:0 0 34px;display:grid;place-items:center}.person-avatar-img,.person-avatar-fallback{width:100%;height:100%;border-radius:50%;object-fit:cover;display:grid;place-items:center;background:var(--ink);color:#fff;font-size:10px;font-weight:900}.person-avatar-img.large,.person-avatar-fallback.large{width:92px;height:92px;font-size:24px}.profile-sheet{max-width:520px}.profile-photo-row{display:flex;align-items:center;gap:16px;margin:4px 0 18px}.profile-preview{width:92px;height:92px;flex:0 0 92px;border-radius:50%;overflow:hidden;background:var(--soft)}.profile-upload{display:inline-grid;place-items:center;min-height:42px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:12px;font-weight:900;cursor:pointer}.profile-photo-row input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 
 .notification-bell{position:relative;width:38px;height:38px!important;padding:0!important;display:grid;place-items:center;font-size:16px}.notification-badge{position:absolute;right:-4px;top:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--red);color:#fff;font-size:9px!important;display:grid;place-items:center;line-height:1;border:2px solid var(--paper)}.notification-sheet{max-width:560px}.notification-actions{display:flex;gap:7px;margin:0 0 10px}.notification-actions button{flex:1;border:1px solid var(--line);background:#fff;border-radius:11px;min-height:40px;font-size:10px;font-weight:900}.notification-list{display:flex;flex-direction:column;gap:8px;max-height:58vh;overflow:auto}.notification-row{width:100%;display:grid;grid-template-columns:38px 1fr;gap:9px;text-align:left;border:1px solid var(--line);background:#fff;border-radius:14px;padding:10px;position:relative}.notification-row.unread{border-color:var(--ink);box-shadow:inset 3px 0 0 var(--red)}.notification-face{width:38px;height:38px;border-radius:50%;overflow:hidden;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:900}.notification-face img{width:100%;height:100%;object-fit:cover}.notification-copy b{display:block;font-size:12px;line-height:1.3}.notification-copy span{display:block;color:var(--muted);font-size:11px;line-height:1.35;margin-top:3px}.notification-copy small{display:block;color:var(--muted);font-size:9px;font-weight:800;margin-top:5px}.notification-empty{padding:28px 12px;text-align:center;color:var(--muted);font-size:12px;font-weight:800}
+
+.theme-toggle{min-width:66px;height:38px!important;padding:0 10px!important;font-size:10px!important;white-space:nowrap}
+html[data-theme="dark"] #authGate{background:var(--paper)}
+html[data-theme="dark"] .auth-card,
+html[data-theme="dark"] .auth-google,
+html[data-theme="dark"] .auth-card input,
+html[data-theme="dark"] #shareCloudModal .share-choice,
+html[data-theme="dark"] #phoneShareModal .share-choice,
+html[data-theme="dark"] .phone-share-block,
+html[data-theme="dark"] #pasteLinkModal input,
+html[data-theme="dark"] .notification-actions button,
+html[data-theme="dark"] .notification-row{background:var(--card);color:var(--ink);border-color:var(--line)}
+html[data-theme="dark"] .auth-email,
+html[data-theme="dark"] .public-open,
+html[data-theme="dark"] #phoneShareModal .iphone-primary{background:var(--ink);color:#171717}
+html[data-theme="dark"] .cloud-user button{background:var(--card);color:var(--ink);border-color:var(--line)}
