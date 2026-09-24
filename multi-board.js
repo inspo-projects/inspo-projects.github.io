@@ -10,7 +10,7 @@
     const move=document.getElementById('moveFindWrap');
     wrap=document.createElement('div');
     wrap.id='addBoardsWrap';wrap.className='field multi-board-field';
-    wrap.innerHTML='<label>Add to one or more boards</label><div id="addBoardsList" class="board-multi-list"></div><div class="hintline">Choose every board you want this find saved to.</div>';
+    wrap.innerHTML='<label>Add to one or more boards</label><div id="addBoardsList" class="board-multi-list"></div><div id="addNewBoardMount"></div><div class="hintline">Choose every board you want this find saved to.</div>';
     move.parentNode.insertBefore(wrap,move);
     return wrap;
   }
@@ -24,6 +24,7 @@
       label.append(input,span);list.appendChild(label);
     });
     wrap.hidden=!!editItemId;
+    if(!editItemId&&window.inspoInlineBoardCreator)window.inspoInlineBoardCreator.mount(document.getElementById('addNewBoardMount'),{listId:'addBoardsList',inputName:'addBoard'});
   }
 
   window.openFindModal=function(id=null){
