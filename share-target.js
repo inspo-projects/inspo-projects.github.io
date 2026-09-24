@@ -144,9 +144,10 @@ async function openPending(){
       '<div><span>'+escapeHTML(info.source||'Inspo')+'</span><b>'+escapeHTML(info.title||'Shared find')+'</b>'+
       '<small>'+escapeHTML(info.price||'')+'</small></div>'+
     '</div>'+
-    '<div class="field"><label>Save to one or more boards</label>'+boardChoices+'<div id="sharedBoardStatus" class="hintline"></div></div>'+
+    '<div class="field"><label>Save to one or more boards</label>'+boardChoices+'<div id="sharedNewBoardMount"></div><div id="sharedBoardStatus" class="hintline"></div></div>'+
     '<button id="saveSharedFind" class="primary">Save find</button>'+
     '<button id="cancelSharedFind" class="share-cancel">Not now</button>';
+  if(window.inspoInlineBoardCreator)window.inspoInlineBoardCreator.mount(q('sharedNewBoardMount'),{listId:'sharedBoardChoices',inputName:'sharedBoard'});
   q('cancelSharedFind').onclick=function(){closeShared(true)};
   q('saveSharedFind').onclick=async function(){
     var btn=q('saveSharedFind'),status=q('sharedBoardStatus');
