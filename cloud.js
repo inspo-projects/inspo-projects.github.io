@@ -135,6 +135,12 @@ window.inspoCloudApi={
     const {data,error}=await sb.functions.invoke('amazon-preview',{body:{url}});
     if(error)throw error;
     return data||{};
+  },
+  previewEtsy:async url=>{
+    if(!cloudUser)throw new Error('Sign in required');
+    const {data,error}=await sb.functions.invoke('etsy-preview',{body:{url}});
+    if(error)throw error;
+    return data||{};
   }
 };
 const LEGACY_CLAIM='inspoLegacyClaimedBy_v1';
